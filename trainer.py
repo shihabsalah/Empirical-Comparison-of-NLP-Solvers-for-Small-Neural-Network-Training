@@ -9,6 +9,10 @@ from losses import get_loss
 from optimizers import get_optimizer
 from torch.utils.data import TensorDataset, DataLoader
 from sklearn.model_selection import train_test_split
+from flatten import flatten_params
+import pickle
+import time
+import pathlib
 
 
 class Trainer:
@@ -39,7 +43,10 @@ class Trainer:
                                     shuffle=True)
         self.te_loader = DataLoader(te_ds, batch_size=1024)
 
-    def _epoch(self):
+        self.snapshots: list[np.ndarray] = []
+        self.snapshot_every = cfg.hp.snapshot_every or 1  # default = each epoch
+
+    def _epoch(self, epoch_idx: int):
         self.model.train()
         total, correct, running_loss = 0, 0, 0.0
         for xb, yb in self.tr_loader:
@@ -54,6 +61,12 @@ class Trainer:
                 preds = logits.argmax(dim=1)
                 correct += (preds == yb).sum().item()
             total += xb.size(0)
+
+        # -------- snapshot logic ------------
+        if epoch_idx % self.snapshot_every == 0:
+            self.snapshots.append(flatten_params(self.model.parameters()))
+        # ------------------------------------
+
         return running_loss/total, correct/total
 
     def _eval(self):
@@ -73,8 +86,12 @@ class Trainer:
     # ------------------------------------------------------------------
     def fit(self):
         for ep in range(1, self.epochs + 1):
-            train_loss, train_acc = self._epoch()
+            train_loss, train_acc = self._epoch(ep)
             test_loss,  test_acc = self._eval()
             print(f"ep {ep:02d} | "
                   f"train loss {train_loss:.4f} acc {train_acc*100:5.1f}%  ||  "
                   f"test loss {test_loss:.4f} acc {test_acc*100:5.1f}%")
+        run_dir = pathlib.Path("runs") / time.strftime("%Y%m%d-%H%M%S")
+        run_dir.mkdir(parents=True, exist_ok=True)
+        with open(run_dir / "snapshots.pkl", "wb") as f:
+            pickle.dump(self.snapshots, f)
