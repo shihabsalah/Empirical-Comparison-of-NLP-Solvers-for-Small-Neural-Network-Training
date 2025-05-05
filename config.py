@@ -6,16 +6,19 @@ from enum import Enum, auto
 class DatasetName(Enum):
     LINEAR_REGRESSION = auto()
     TWO_MOONS_CLASSIFICATION = auto()
+    MNIST_DIGITS_CLASSIFICATION = auto()
 
 
 class ModelName(Enum):
     LINEAR = auto()
     TINY_MLP = auto()
+    MNIST_MLP = auto()
 
 
 class LossName(Enum):
     MSE = auto()
     BCE = auto()
+    CROSS_ENTROPY = auto()
 
 
 class OptimizerName(Enum):
@@ -26,16 +29,16 @@ class OptimizerName(Enum):
 
 @dataclass
 class HyperParams:
-    learning_rate: float = 0.01
-    epochs: int = 1000
-    batch_size: int | None = None  # None ⇒ full‑batch
-    seed: int = 42
+    learning_rate: float = 0.05
+    epochs:        int = 10
+    batch_size:    int = 128
+    seed:          int = 42
 
 
 @dataclass
 class ExperimentConfig:
-    dataset: DatasetName
-    model: ModelName
-    loss: LossName
+    dataset:   DatasetName
+    model:     ModelName
+    loss:      LossName
     optimizer: OptimizerName
-    hp: HyperParams = field(default_factory=HyperParams)
+    hp:        HyperParams

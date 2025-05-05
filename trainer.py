@@ -7,6 +7,8 @@ from data import load_dataset
 from models import build_model
 from losses import get_loss
 from optimizers import get_optimizer
+from torch.utils.data import TensorDataset, DataLoader
+from sklearn.model_selection import train_test_split
 
 
 class Trainer:
@@ -16,29 +18,63 @@ class Trainer:
         np.random.seed(cfg.hp.seed)
         torch.manual_seed(cfg.hp.seed)
 
-        # data
-        self.X_np, self.y_np = load_dataset(cfg.dataset)
+        X, y = load_dataset(cfg.dataset, limit=None)   # full MNIST by default
+        self.Xtr, self.Xte, self.ytr, self.yte = train_test_split(
+            X, y, test_size=0.2, random_state=cfg.hp.seed, stratify=y)
 
-        # model + loss + optim
         self.model = build_model(cfg.model)
         self.loss_fn = get_loss(cfg.loss)
-        self.optim = get_optimizer(
-            cfg.optimizer, self.model.parameters(), cfg.hp.learning_rate)
+        self.optim = get_optimizer(cfg.optimizer,
+                                   self.model.parameters(),
+                                   cfg.hp.learning_rate)
         self.epochs = cfg.hp.epochs
+        self.batch_size = cfg.hp.batch_size
+
+        # build PyTorch DataLoaders
+        tr_ds = TensorDataset(torch.from_numpy(self.Xtr),
+                              torch.from_numpy(self.ytr))
+        te_ds = TensorDataset(torch.from_numpy(self.Xte),
+                              torch.from_numpy(self.yte))
+        self.tr_loader = DataLoader(tr_ds, batch_size=self.batch_size,
+                                    shuffle=True)
+        self.te_loader = DataLoader(te_ds, batch_size=1024)
+
+    def _epoch(self):
+        self.model.train()
+        total, correct, running_loss = 0, 0, 0.0
+        for xb, yb in self.tr_loader:
+            self.optim.zero_grad()
+            logits = self.model(xb)
+            loss = self.loss_fn(logits, yb)
+            loss.backward()
+            self.optim.step()
+
+            running_loss += loss.item() * xb.size(0)
+            if isinstance(self.loss_fn, torch.nn.CrossEntropyLoss):
+                preds = logits.argmax(dim=1)
+                correct += (preds == yb).sum().item()
+            total += xb.size(0)
+        return running_loss/total, correct/total
+
+    def _eval(self):
+        self.model.eval()
+        total, correct, running_loss = 0, 0, 0.0
+        with torch.no_grad():
+            for xb, yb in self.te_loader:
+                logits = self.model(xb)
+                loss = self.loss_fn(logits, yb)
+                running_loss += loss.item() * xb.size(0)
+                if isinstance(self.loss_fn, torch.nn.CrossEntropyLoss):
+                    preds = logits.argmax(dim=1)
+                    correct += (preds == yb).sum().item()
+                total += xb.size(0)
+        return running_loss/total, correct/total
 
     # ------------------------------------------------------------------
     def fit(self):
-        losses: list[float] = []
-        X_tensor = torch.from_numpy(self.X_np)
-        y_tensor = torch.from_numpy(self.y_np)
-        for epoch in range(self.epochs):
-            self.optim.zero_grad()
-            outputs = self.model.forward(X_tensor)
-            loss = self.loss_fn(outputs, y_tensor)
-            loss.backward()
-            self.optim.step()
-            losses.append(float(loss.item()))
-            if epoch % max(1, self.epochs // 10) == 0:
-                print(f"epoch {epoch:4d}  loss {loss.item():.6f}")
-        print("Training finished → final loss:", losses[-1])
-        return losses
+        for ep in range(1, self.epochs + 1):
+            train_loss, train_acc = self._epoch()
+            test_loss,  test_acc = self._eval()
+            print(f"ep {ep:02d} | "
+                  f"train loss {train_loss:.4f} acc {train_acc*100:5.1f}%  ||  "
+                  f"test loss {test_loss:.4f} acc {test_acc*100:5.1f}%")

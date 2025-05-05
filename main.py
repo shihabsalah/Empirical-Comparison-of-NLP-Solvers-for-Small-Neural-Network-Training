@@ -1,12 +1,15 @@
-from config import DatasetName, ModelName, LossName, OptimizerName, HyperParams, ExperimentConfig
+from config import (ExperimentConfig, HyperParams,
+                    DatasetName, ModelName, LossName, OptimizerName)
 from trainer import Trainer
 
-if __name__ == "__main__":
-    cfg = ExperimentConfig(
-        dataset=DatasetName.TWO_MOONS_CLASSIFICATION,
-        model=ModelName.TINY_MLP,
-        loss=LossName.BCE,
-        optimizer=OptimizerName.SGD,
-        hp=HyperParams(learning_rate=0.1, epochs=1000),
-    )
-    Trainer(cfg).fit()
+cfg = ExperimentConfig(
+    dataset=DatasetName.MNIST_DIGITS_CLASSIFICATION,
+    model=ModelName.MNIST_MLP,
+    loss=LossName.CROSS_ENTROPY,
+    optimizer=OptimizerName.SGD,
+    hp=HyperParams(learning_rate=0.05,
+                   epochs=10,
+                   batch_size=128,
+                   seed=42),
+)
+Trainer(cfg).fit()

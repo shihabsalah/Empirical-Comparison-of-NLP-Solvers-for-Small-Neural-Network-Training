@@ -4,7 +4,7 @@ from config import OptimizerName
 
 def get_optimizer(name: OptimizerName, params, lr: float):
     if name == OptimizerName.SGD:
-        return optim.SGD(params, lr=lr)
+        return optim.SGD(params, lr=lr, momentum=0.9)
     if name == OptimizerName.ADAM:
         return optim.Adam(params, lr=lr)
     if name == OptimizerName.LBFGS:
