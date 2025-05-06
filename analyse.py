@@ -14,6 +14,14 @@ from data import load_dataset
 from config import DatasetName
 
 # ------------------------------------------------------------
+import torch
+
+
+def get_device(cuda_requested: bool = True) -> torch.device:
+    print("CUDA available:", torch.cuda.is_available())
+    if cuda_requested and torch.cuda.is_available():
+        return torch.device("cuda")
+    return torch.device("cpu")
 
 
 def main(run_dir: pathlib.Path,
@@ -43,57 +51,72 @@ def main(run_dir: pathlib.Path,
     plt.tight_layout()
     plt.savefig(run_dir / "pca_path.png", dpi=150)
 
-    # 4) optional loss-surface grid in the same plane -----------------
+    # 4) optional loss-surface grid -----------------------------------------
     if draw_loss_surface:
-        print("Computing loss grid … (this can take a few minutes)")
-        # 4a) rebuild model & data once
-        model = build_model(ModelName.MNIST_MLP)
-        loss_fn = get_loss(LossName.CROSS_ENTROPY)
-        X, y = load_dataset(
-            DatasetName.MNIST_DIGITS_CLASSIFICATION, limit=None)
-        dl = DataLoader(list(zip(torch.from_numpy(X), torch.from_numpy(y))),
-                        batch_size=1024)
+        print("Computing loss grid … this can take a few minutes")
+        device = get_device(cuda_requested=args.gpu)
+        print("Using device:", device)
 
-        theta_mean = snaps[-1]                     # centre grid at final point
-        dir1, dir2 = pca.components_              # shape (2, D)
+        # -- (re)build model & data once ------------------------------------
+        model = build_model(ModelName.MNIST_MLP).to(device)
+        loss_fn = get_loss(LossName.CROSS_ENTROPY).to(device)
+        X, y = load_dataset(DatasetName.MNIST_DIGITS_CLASSIFICATION)
+        X_pt = torch.from_numpy(X).to(device)
+        y_pt = torch.from_numpy(y).to(device)
+        full_dl = DataLoader(list(zip(X_pt, y_pt)),
+                             batch_size=4096,  # big batch, GPU friendly
+                             pin_memory=False, shuffle=False)
 
-        alphas = np.linspace(-1.2, 1.2, grid_pts)
-        betas = np.linspace(-1.2, 1.2, grid_pts)
+        # -- α,β coordinates for *all* snapshots ----------------------------
+        #   proj = PCA-transform of snaps  → already computed above
+        alpha_all, beta_all = proj[:, 0], proj[:, 1]
+
+        # padding so the grid is a bit larger than the trajectory box
+        pad = 0.5
+        alpha_min, alpha_max = alpha_all.min() - pad, alpha_all.max() + pad
+        beta_min,  beta_max = beta_all.min() - pad, beta_all.max() + pad
+
+        grid_pts = grid_pts            # comes from CLI arg
+        alphas = np.linspace(alpha_min, alpha_max, grid_pts)
+        betas = np.linspace(beta_min,  beta_max,  grid_pts)
         loss_mat = np.zeros((grid_pts, grid_pts))
+
+        dir1, dir2 = pca.components_           # (2, D)
+        theta_mean = pca.mean_                 # centre of PCA coords
 
         for i, a in enumerate(alphas):
             for j, b in enumerate(betas):
                 theta = theta_mean + a*dir1 + b*dir2
                 assign_flat_to_params(theta, model.parameters())
-                # full-batch loss:
+
                 with torch.no_grad():
                     running = 0.0
-                    for xb, yb in dl:
+                    for xb, yb in full_dl:
                         logits = model(xb)
                         running += loss_fn(logits, yb).item() * xb.size(0)
-                loss_mat[j, i] = running / len(dl.dataset)
+                loss_mat[j, i] = running / len(full_dl.dataset)
 
-        # 4b) contour plot under the trajectory
+        # -- draw the contour + trajectory ---------------------------------
         plt.figure(figsize=(5, 4))
         CS = plt.contour(alphas, betas, loss_mat, levels=30, cmap="coolwarm")
-        plt.clabel(CS, fontsize=6, inline=True)
-        # re-plot trajectory in αβ coords
-        AB = np.stack([np.zeros(len(proj)), np.zeros(len(proj))], axis=1)
-        # solve proj = theta_mean + a*dir1 + b*dir2  → coefficients (a,b)
-        for k, theta in enumerate(snaps):
-            coef = np.linalg.lstsq(
-                np.stack([dir1, dir2], axis=1), theta-theta_mean, rcond=None)[0]
-            AB[k] = coef
-        plt.plot(AB[:, 0], AB[:, 1], c="black", marker='o', markersize=2)
+        plt.clabel(CS, inline=True, fontsize=6)
+
+        plt.plot(alpha_all, beta_all,
+                 color="black", marker='o', markersize=3, linewidth=1.5)
+        plt.scatter(alpha_all[-1], beta_all[-1],
+                    c="red",  s=40, label="final")
         plt.title("Loss surface in PCA plane")
         plt.xlabel("α (PC-1)")
         plt.ylabel("β (PC-2)")
+        plt.legend()
         plt.tight_layout()
         plt.savefig(run_dir / "pca_loss_surface.png", dpi=150)
 
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
+    ap.add_argument("--gpu", action="store_true",
+                    help="evaluate loss grid on the first CUDA GPU")
     ap.add_argument("run_dir", type=pathlib.Path,
                     help="folder that contains snapshots.pkl")
     ap.add_argument("--surface", action="store_true",
