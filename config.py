@@ -33,7 +33,8 @@ class HyperParams:
     epochs:        int = 10
     batch_size:    int = 128
     seed:          int = 42
-    snapshot_every: int = 1  # default = each epoch
+    snapshot_every: int = 1
+    use_cuda: bool = True
 
 
 @dataclass

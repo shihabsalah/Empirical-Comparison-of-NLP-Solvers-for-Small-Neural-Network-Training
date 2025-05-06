@@ -10,7 +10,7 @@ class Utils:
     def choose_device(request_cuda: bool = True) -> torch.device:
         """Return cuda device(0) if available & requested, else cpu."""
         if request_cuda and torch.cuda.is_available():
-            return torch.device("cuda:0")
+            return torch.device("cuda")
         return torch.device("cpu")
 
     @staticmethod

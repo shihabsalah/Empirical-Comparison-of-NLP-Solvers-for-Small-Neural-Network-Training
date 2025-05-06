@@ -47,7 +47,7 @@ def main(run_dir: pathlib.Path,
     # 4) optional loss-surface grid -----------------------------------------
     if draw_loss_surface:
         print("Computing loss grid … this can take a few minutes")
-        device = Utils.choose_device(cuda_requested=args.gpu)
+        device = Utils.choose_device(request_cuda=args.gpu)
         print("Using device:", device)
 
         # -- (re)build model & data once ------------------------------------

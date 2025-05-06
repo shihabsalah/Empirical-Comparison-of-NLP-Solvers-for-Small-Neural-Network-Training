@@ -10,6 +10,8 @@ cfg = ExperimentConfig(
     hyperParameters=HyperParams(learning_rate=0.05,
                                 epochs=10,
                                 batch_size=128,
-                                seed=42),
+                                seed=42,
+                                use_cuda=True,
+                                snapshot_every=1),
 )
 Trainer(cfg).fit()

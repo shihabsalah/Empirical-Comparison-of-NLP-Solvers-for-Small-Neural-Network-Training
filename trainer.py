@@ -31,6 +31,9 @@ class Trainer:
             configuration: The configuration object for the experiment.
         """
         self.config = configuration
+        self.computation_device = Utils.choose_device(
+            self.config.hyperParameters.use_cuda)
+        print(">>> Training on", self.computation_device)
         self._set_seeds()
         self._prepare_data()
         self._initialize_training_components()
@@ -63,8 +66,8 @@ class Trainer:
 
     def _initialize_training_components(self) -> None:
         """Initializes the model, loss function, and optimizer."""
-        self.model = build_model(self.config.model)
-        self.loss_fn = get_loss(self.config.loss)
+        self.model = build_model(self.config.model).to(self.computation_device)
+        self.loss_fn = get_loss(self.config.loss).to(self.computation_device)
         self.optimizer = get_optimizer(
             self.config.optimizer,
             self.model.parameters(),
@@ -74,19 +77,47 @@ class Trainer:
         self.batch_size = self.config.hyperParameters.batch_size
 
     def _create_dataloaders(self) -> None:
-        """Creates PyTorch DataLoaders for training and testing."""
-        training_dataset = TensorDataset(
-            torch.from_numpy(self.training_features),
-            torch.from_numpy(self.training_labels),
+        """
+            Creates PyTorch DataLoaders for training and testing
+            Converts the NumPy feature and label arrays into PyTorch tensors that
+            already live on self.computation_device, then wraps them in DataLoaders.
+        """
+        # --- convert training split ------------------------------------------------
+        training_feature_tensor = torch.tensor(
+            self.training_features, dtype=torch.float32,
+            device=self.computation_device
         )
-        testing_dataset = TensorDataset(
-            torch.from_numpy(self.testing_features),
-            torch.from_numpy(self.testing_labels),
+        training_label_tensor = torch.tensor(
+            self.training_labels, dtype=torch.long,
+            device=self.computation_device
         )
+
+        # --- convert testing split -------------------------------------------------
+        testing_feature_tensor = torch.tensor(
+            self.testing_features, dtype=torch.float32,
+            device=self.computation_device
+        )
+        testing_label_tensor = torch.tensor(
+            self.testing_labels, dtype=torch.long,
+            device=self.computation_device
+        )
+
+        # --- wrap tensors in TensorDataset objects ---------------------------------
+        training_dataset = TensorDataset(training_feature_tensor,
+                                         training_label_tensor)
+        testing_dataset = TensorDataset(testing_feature_tensor,
+                                        testing_label_tensor)
+
+        # --- finally build the DataLoaders -----------------------------------------
         self.training_data_loader = DataLoader(
-            training_dataset, batch_size=self.batch_size, shuffle=True
+            dataset=training_dataset,
+            batch_size=self.batch_size,
+            shuffle=True
         )
-        self.testing_data_loader = DataLoader(testing_dataset, batch_size=1024)
+        self.testing_data_loader = DataLoader(
+            dataset=testing_dataset,
+            batch_size=4_096          # single large batch for evaluation
+        )
 
     def _epoch(self, epoch_index: int) -> tuple[float, float]:
         """
