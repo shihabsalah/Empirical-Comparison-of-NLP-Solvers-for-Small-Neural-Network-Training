@@ -102,11 +102,12 @@ class TrainingLoop:
         print(
             f">>> Training on {self.device} with {self.config.optimizer_choice.name}")
 
-        if hasattr(self.optimizer, "run_full_batch_solve"):
-            # Build one closure over the *entire* training set for one-shot solvers
+        # trainer/training_loop.py  (inside run())
+        base_method = getattr(type(self.optimizer), "run_full_batch_solve")
+        if base_method is not BaseOptimizer.run_full_batch_solve:
+            # true one-shot solver (SLSQP, IPOPT, CMA-ES, …)
             full_loss_closure = self._build_full_batch_closure()
             self.optimizer.run_full_batch_solve(full_loss_closure)
-            # save one snapshot
             self.snapshots.append(
                 Utils.flatten_params(self.model.parameters()))
             test_loss, test_acc = self._evaluate()
