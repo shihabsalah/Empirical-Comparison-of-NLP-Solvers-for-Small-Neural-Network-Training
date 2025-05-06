@@ -4,14 +4,20 @@ from dataclasses import dataclass
 
 class DatasetName(Enum):
     MNIST_DIGITS = auto()
+    LINEAR_REGRESSION = auto()
+    TWO_MOONS_CLASSIFICATION = auto()
 
 
 class ModelName(Enum):
     MNIST_MLP = auto()
+    LINEAR = auto()
+    TINY_MLP = auto()  # for two moons classification
 
 
 class LossName(Enum):
     CROSS_ENTROPY = auto()
+    MSE = auto()
+    BCE = auto()  # binary cross entropy (for two moons)
 
 # ---------------- new, expressive solver enum ------------------------
 

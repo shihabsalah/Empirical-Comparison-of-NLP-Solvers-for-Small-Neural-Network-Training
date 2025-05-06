@@ -28,7 +28,7 @@ def load_dataset(name: DatasetName, limit: int | None = None):
         # int labels 0/1
         return X.astype(np.float32), y.reshape(-1).astype(np.int64)
 
-    if name == DatasetName.MNIST_DIGITS_CLASSIFICATION:
+    if name == DatasetName.MNIST_DIGITS:
         if MNIST is None:
             raise ImportError(
                 "torchvision is required for MNIST. `pip install torchvision`. ")
