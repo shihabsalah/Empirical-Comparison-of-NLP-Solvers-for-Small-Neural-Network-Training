@@ -7,7 +7,7 @@ torch.optim.Optimizer:  `.step()` and `.zero_grad()` at minimum.
 
 from typing import Iterator
 import torch
-
+from optimizers.base_optimizer import BaseOptimizer
 from config import OptimizerName
 from optimizers.adam_wrapper import AdamWrapper
 from optimizers.lbfgs_wrapper import LBFGSWrapper
@@ -23,7 +23,7 @@ def get_optimizer(
     choice: OptimizerName,
     model_parameters: Iterator[torch.nn.Parameter],
     learning_rate: float,
-) -> "BaseOptimizer":
+) -> BaseOptimizer:
     if choice is OptimizerName.ADAM:
         return AdamWrapper(model_parameters, learning_rate)
     if choice is OptimizerName.L_BFGS:

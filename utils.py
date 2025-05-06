@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 from typing import Iterator
+import random
 
 
 class Utils:
@@ -28,3 +29,18 @@ class Utils:
                 flat[idx:idx+n]).view_as(p).to(p.data.device)
             p.data.copy_(tmp)
             idx += n
+
+    @staticmethod
+    def set_global_seed(seed: int) -> None:
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+
+    @staticmethod
+    def train_test_split(features, labels, test_fraction, seed):
+        from sklearn.model_selection import train_test_split
+        return train_test_split(
+            features, labels,
+            test_size=test_fraction,
+            random_state=seed,
+            stratify=labels)

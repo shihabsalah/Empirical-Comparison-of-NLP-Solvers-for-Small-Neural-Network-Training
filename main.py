@@ -1,17 +1,14 @@
-from config import (ExperimentConfig, HyperParams,
-                    DatasetName, ModelName, LossName, OptimizerName)
+from config import (
+    ExperimentConfig, HyperParameterSet,
+    DatasetName, ModelName, LossName, OptimizerName
+)
 from trainer import Trainer
 
 cfg = ExperimentConfig(
-    dataset=DatasetName.MNIST_DIGITS_CLASSIFICATION,
+    dataset=DatasetName.MNIST_DIGITS,
     model=ModelName.MNIST_MLP,
     loss=LossName.CROSS_ENTROPY,
-    optimizer=OptimizerName.SGD,
-    hyperParameters=HyperParams(learning_rate=0.05,
-                                epochs=10,
-                                batch_size=128,
-                                seed=42,
-                                use_cuda=True,
-                                snapshot_every=1),
+    optimizer_choice=OptimizerName.L_BFGS,
+    hyper_parameters=HyperParameterSet(learning_rate=0.8, epochs=15)
 )
-Trainer(cfg).fit()
+Trainer(cfg).run()
