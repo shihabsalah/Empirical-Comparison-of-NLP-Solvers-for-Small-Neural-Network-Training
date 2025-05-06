@@ -38,8 +38,8 @@ class HyperParams:
 
 @dataclass
 class ExperimentConfig:
-    dataset:   DatasetName
-    model:     ModelName
-    loss:      LossName
-    optimizer: OptimizerName
-    hp:        HyperParams
+    dataset:            DatasetName
+    model:              ModelName
+    loss:               LossName
+    optimizer:          OptimizerName
+    hyperParameters:    HyperParams

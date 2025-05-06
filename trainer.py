@@ -1,56 +1,109 @@
 from __future__ import annotations
+
+import pathlib
+import pickle
 import random
+import time
+
 import numpy as np
 import torch
-from config import ExperimentConfig, ModelName
-from data import load_dataset
-from models import build_model
-from losses import get_loss
-from optimizers import get_optimizer
-from torch.utils.data import TensorDataset, DataLoader
 from sklearn.model_selection import train_test_split
+from torch.utils.data import DataLoader, TensorDataset
+
+from config import ExperimentConfig
+from data import load_dataset
 from flatten import flatten_params
-import pickle
-import time
-import pathlib
+from losses import get_loss
+from models import build_model
+from optimizers import get_optimizer
 
 
 class Trainer:
+    """
+    Handles the training and evaluation of a neural network model based on a given configuration.
+    """
+
     def __init__(self, configuration: ExperimentConfig):
-        # reproducibility
-        random.seed(configuration.hyperParameters.seed)
-        np.random.seed(configuration.hyperParameters.seed)
-        torch.manual_seed(configuration.hyperParameters.seed)
+        """
+        Initializes the Trainer with the given experiment configuration.
 
-        features, labels = load_dataset(
-            configuration.dataset, limit=None)   # full MNIST by default
-        self.training_features, self.testing_features, self.training_labels, self.testing_labels = train_test_split(
-            features, labels, test_size=0.2, random_state=configuration.hyperParameters.seed, stratify=labels)
-
-        self.model = build_model(configuration.model)
-        self.loss_fn = get_loss(configuration.loss)
-        self.optimizer = get_optimizer(configuration.optimizer,
-                                       self.model.parameters(),
-                                       configuration.hyperParameters.learning_rate)
-        self.epochs = configuration.hyperParameters.epochs
-        self.batch_size = configuration.hyperParameters.batch_size
-
-        # build PyTorch DataLoaders
-        training_dataset = TensorDataset(torch.from_numpy(self.training_features),
-                                         torch.from_numpy(self.training_labels))
-        testing_dataset = TensorDataset(torch.from_numpy(self.testing_features),
-                                        torch.from_numpy(self.testing_labels))
-        self.training_data_loader = DataLoader(training_dataset, batch_size=self.batch_size,
-                                               shuffle=True)
-        self.testing_data_loader = DataLoader(testing_dataset, batch_size=1024)
+        Args:
+            configuration: The configuration object for the experiment.
+        """
+        self.config = configuration
+        self._set_seeds()
+        self._prepare_data()
+        self._initialize_training_components()
+        self._create_dataloaders()
 
         self.snapshots: list[np.ndarray] = []
         # default = each epoch
-        self.snapshot_every = configuration.hyperParameters.snapshot_every or 1
+        self.snapshot_every = self.config.hyperParameters.snapshot_every or 1
 
-    def _epoch(self, epoch_index: int):
+    def _set_seeds(self) -> None:
+        """Sets random seeds for reproducibility."""
+        seed = self.config.hyperParameters.seed
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+
+    def _prepare_data(self) -> None:
+        """Loads and splits the dataset into training and testing sets."""
+        """Featuresa are the input data, and labels are the target values."""
+        features, labels = load_dataset(
+            self.config.dataset, limit=None
+        )  # full MNIST by default
+        self.training_features, self.testing_features, self.training_labels, self.testing_labels = train_test_split(
+            features,
+            labels,
+            test_size=0.2,
+            random_state=self.config.hyperParameters.seed,
+            stratify=labels,
+        )
+
+    def _initialize_training_components(self) -> None:
+        """Initializes the model, loss function, and optimizer."""
+        self.model = build_model(self.config.model)
+        self.loss_fn = get_loss(self.config.loss)
+        self.optimizer = get_optimizer(
+            self.config.optimizer,
+            self.model.parameters(),
+            self.config.hyperParameters.learning_rate,
+        )
+        self.epochs = self.config.hyperParameters.epochs
+        self.batch_size = self.config.hyperParameters.batch_size
+
+    def _create_dataloaders(self) -> None:
+        """Creates PyTorch DataLoaders for training and testing."""
+        training_dataset = TensorDataset(
+            torch.from_numpy(self.training_features),
+            torch.from_numpy(self.training_labels),
+        )
+        testing_dataset = TensorDataset(
+            torch.from_numpy(self.testing_features),
+            torch.from_numpy(self.testing_labels),
+        )
+        self.training_data_loader = DataLoader(
+            training_dataset, batch_size=self.batch_size, shuffle=True
+        )
+        self.testing_data_loader = DataLoader(testing_dataset, batch_size=1024)
+
+    def _epoch(self, epoch_index: int) -> tuple[float, float]:
+        """
+        Performs a single training epoch.
+
+        Args:
+            epoch_index: The current epoch number.
+
+        Returns:
+            A tuple containing the average training loss and accuracy for the epoch.
+        """
         self.model.train()
-        total_samples_processed, correct_predictions_count, current_epoch_loss = 0, 0, 0.0
+        total_samples_processed, correct_predictions_count, current_epoch_loss = (
+            0,
+            0,
+            0.0,
+        )
         for feature_batch, label_batch in self.training_data_loader:
             self.optimizer.zero_grad()
             raw_model_outputs = self.model(feature_batch)
@@ -61,22 +114,31 @@ class Trainer:
             current_epoch_loss += loss_value.item() * feature_batch.size(0)
             if isinstance(self.loss_fn, torch.nn.CrossEntropyLoss):
                 batch_predictions = raw_model_outputs.argmax(dim=1)
-                correct_predictions_count += (batch_predictions ==
-                                              label_batch).sum().item()
+                correct_predictions_count += (
+                    (batch_predictions == label_batch).sum().item()
+                )
             total_samples_processed += feature_batch.size(0)
 
-        # -------- snapshot logic ------------
         if epoch_index % self.snapshot_every == 0:
             self.snapshots.append(flatten_params(self.model.parameters()))
-        # ------------------------------------
 
         average_epoch_loss = current_epoch_loss / total_samples_processed
         epoch_accuracy = correct_predictions_count / total_samples_processed
         return average_epoch_loss, epoch_accuracy
 
-    def _eval(self):
+    def _eval(self) -> tuple[float, float]:
+        """
+        Evaluates the model on the testing dataset.
+
+        Returns:
+            A tuple containing the average evaluation loss and accuracy.
+        """
         self.model.eval()
-        total_samples_processed, correct_predictions_count, current_eval_loss = 0, 0, 0.0
+        total_samples_processed, correct_predictions_count, current_eval_loss = (
+            0,
+            0,
+            0.0,
+        )
         with torch.no_grad():
             for feature_batch, label_batch in self.testing_data_loader:
                 raw_model_outputs = self.model(feature_batch)
@@ -84,24 +146,41 @@ class Trainer:
                 current_eval_loss += loss_value.item() * feature_batch.size(0)
                 if isinstance(self.loss_fn, torch.nn.CrossEntropyLoss):
                     batch_predictions = raw_model_outputs.argmax(dim=1)
-                    correct_predictions_count += (batch_predictions ==
-                                                  label_batch).sum().item()
+                    correct_predictions_count += (
+                        (batch_predictions == label_batch).sum().item()
+                    )
                 total_samples_processed += feature_batch.size(0)
 
         average_eval_loss = current_eval_loss / total_samples_processed
         eval_accuracy = correct_predictions_count / total_samples_processed
         return average_eval_loss, eval_accuracy
 
-    # ------------------------------------------------------------------
-    def fit(self):
+    def fit(self) -> None:
+        """
+        Trains the model for the configured number of epochs and saves parameter snapshots.
+        """
+        print(
+            f"Starting training for {self.config.model.value} model "
+            f"with {self.config.optimizer.value} optimizer "
+            f"for {self.epochs} epochs."
+        )
         for epoch_number in range(1, self.epochs + 1):
             training_loss, training_accuracy = self._epoch(epoch_number)
-            testing_loss,  testing_accuracy = self._eval()
-            print(f"Epoch {epoch_number:02d} | "
-                  f"Train Loss {training_loss:.4f} Acc {training_accuracy*100:5.1f}%  ||  "
-                  f"Test Loss {testing_loss:.4f} Acc {testing_accuracy*100:5.1f}%")
+            testing_loss, testing_accuracy = self._eval()
+            print(
+                f"Epoch {epoch_number:02d} | "
+                f"Train Loss {training_loss:.4f} Acc {training_accuracy*100:5.1f}%  ||  "
+                f"Test Loss {testing_loss:.4f} Acc {testing_accuracy*100:5.1f}%"
+            )
 
+        self._save_snapshots()
+        print("Training complete. Snapshots saved.")
+
+    def _save_snapshots(self) -> None:
+        """Saves the collected parameter snapshots to a pickle file."""
         run_directory = pathlib.Path("runs") / time.strftime("%Y%m%d-%H%M%S")
         run_directory.mkdir(parents=True, exist_ok=True)
-        with open(run_directory / "snapshots.pkl", "wb") as snapshot_file:
+        snapshot_file_path = run_directory / "snapshots.pkl"
+        with open(snapshot_file_path, "wb") as snapshot_file:
             pickle.dump(self.snapshots, snapshot_file)
+        print(f"Snapshots saved to {snapshot_file_path}")

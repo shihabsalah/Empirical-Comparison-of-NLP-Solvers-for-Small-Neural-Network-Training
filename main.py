@@ -7,9 +7,9 @@ cfg = ExperimentConfig(
     model=ModelName.MNIST_MLP,
     loss=LossName.CROSS_ENTROPY,
     optimizer=OptimizerName.SGD,
-    hp=HyperParams(learning_rate=0.05,
-                   epochs=10,
-                   batch_size=128,
-                   seed=42),
+    hyperParameters=HyperParams(learning_rate=0.05,
+                                epochs=10,
+                                batch_size=128,
+                                seed=42),
 )
 Trainer(cfg).fit()
