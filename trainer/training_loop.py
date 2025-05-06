@@ -130,15 +130,15 @@ class TrainingLoop:
     # -------------------------------------------------------------------------
     def _build_full_batch_closure(self) -> Callable[[], float]:
         """Returns a function that computes the full-batch loss once."""
-        def closure() -> float:
+        def closure() -> torch.Tensor:
             self.model.train()
-            running, total = 0.0, 0
+            running_loss, total_items = 0.0, 0
             for features, labels in self.train_loader:
                 outputs = self.model(features)
-                running += self.loss_function(outputs,
-                                              labels).item() * features.size(0)
-                total += features.size(0)
-            return running / total
+                running_loss += self.loss_function(outputs, labels)
+                total_items += 1
+            # mean across mini-batches; still a *tensor*
+            return running_loss / total_items
         return closure
 
     # -------------------------------------------------------------------------
