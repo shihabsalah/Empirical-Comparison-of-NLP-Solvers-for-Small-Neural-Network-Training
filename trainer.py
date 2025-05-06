@@ -67,12 +67,15 @@ class Trainer:
     def _initialize_training_components(self) -> None:
         """Initializes the model, loss function, and optimizer."""
         self.model = build_model(self.config.model).to(self.computation_device)
-        self.loss_fn = get_loss(self.config.loss).to(self.computation_device)
+        self.loss_function = get_loss(
+            self.config.loss).to(self.computation_device)
+
         self.optimizer = get_optimizer(
-            self.config.optimizer,
-            self.model.parameters(),
-            self.config.hyperParameters.learning_rate,
+            choice=self.config.optimizer_choice,
+            model_parameters=self.model.parameters(),
+            learning_rate=self.config.hyper_parameters.learning_rate,
         )
+
         self.epochs = self.config.hyperParameters.epochs
         self.batch_size = self.config.hyperParameters.batch_size
 

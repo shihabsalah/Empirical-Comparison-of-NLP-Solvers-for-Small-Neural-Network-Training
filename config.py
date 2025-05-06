@@ -1,46 +1,46 @@
-from __future__ import annotations
-from dataclasses import dataclass, field
 from enum import Enum, auto
+from dataclasses import dataclass
 
 
 class DatasetName(Enum):
-    LINEAR_REGRESSION = auto()
-    TWO_MOONS_CLASSIFICATION = auto()
-    MNIST_DIGITS_CLASSIFICATION = auto()
+    MNIST_DIGITS = auto()
 
 
 class ModelName(Enum):
-    LINEAR = auto()
-    TINY_MLP = auto()
     MNIST_MLP = auto()
 
 
 class LossName(Enum):
-    MSE = auto()
-    BCE = auto()
     CROSS_ENTROPY = auto()
+
+# ---------------- new, expressive solver enum ------------------------
 
 
 class OptimizerName(Enum):
-    SGD = auto()
-    ADAM = auto()
-    LBFGS = auto()
+    ADAM = auto()     # family A
+    L_BFGS = auto()     # family C
+    TRUST_REGION_NEWTON = auto()     # family B
+    SLSQP = auto()     # family D
+    IPOPT = auto()     # family E
+    ADMM = auto()     # family F
+    CMA_ES = auto()     # family G
+    KFAC = auto()     # family H  (optional)
 
 
 @dataclass
-class HyperParams:
+class HyperParameterSet:
     learning_rate: float = 0.05
-    epochs:        int = 10
-    batch_size:    int = 128
-    seed:          int = 42
-    snapshot_every: int = 1
+    epochs: int = 10
+    batch_size: int = 128
+    seed: int = 42
     use_cuda: bool = True
+    snapshot_every: int = 1
 
 
 @dataclass
 class ExperimentConfig:
-    dataset:            DatasetName
-    model:              ModelName
-    loss:               LossName
-    optimizer:          OptimizerName
-    hyperParameters:    HyperParams
+    dataset: DatasetName
+    model: ModelName
+    loss: LossName
+    optimizer_choice: OptimizerName
+    hyper_parameters: HyperParameterSet
