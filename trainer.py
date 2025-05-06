@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from config import ExperimentConfig
 from data import load_dataset
-from flatten import flatten_params
+from utils import Utils
 from losses import get_loss
 from models import build_model
 from optimizers import get_optimizer
@@ -120,7 +120,8 @@ class Trainer:
             total_samples_processed += feature_batch.size(0)
 
         if epoch_index % self.snapshot_every == 0:
-            self.snapshots.append(flatten_params(self.model.parameters()))
+            self.snapshots.append(
+                Utils.flatten_params(self.model.parameters()))
 
         average_epoch_loss = current_epoch_loss / total_samples_processed
         epoch_accuracy = correct_predictions_count / total_samples_processed

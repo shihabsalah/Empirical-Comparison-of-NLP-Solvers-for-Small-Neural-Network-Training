@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 import torch
 from torch.utils.data import DataLoader
-from flatten import assign_flat_to_params
+from utils import Utils
 from models import build_model
 from losses import get_loss
 from config import ModelName, LossName
@@ -15,13 +15,6 @@ from config import DatasetName
 
 # ------------------------------------------------------------
 import torch
-
-
-def get_device(cuda_requested: bool = True) -> torch.device:
-    print("CUDA available:", torch.cuda.is_available())
-    if cuda_requested and torch.cuda.is_available():
-        return torch.device("cuda")
-    return torch.device("cpu")
 
 
 def main(run_dir: pathlib.Path,
@@ -54,7 +47,7 @@ def main(run_dir: pathlib.Path,
     # 4) optional loss-surface grid -----------------------------------------
     if draw_loss_surface:
         print("Computing loss grid … this can take a few minutes")
-        device = get_device(cuda_requested=args.gpu)
+        device = Utils.choose_device(cuda_requested=args.gpu)
         print("Using device:", device)
 
         # -- (re)build model & data once ------------------------------------
@@ -87,7 +80,7 @@ def main(run_dir: pathlib.Path,
         for i, a in enumerate(alphas):
             for j, b in enumerate(betas):
                 theta = theta_mean + a*dir1 + b*dir2
-                assign_flat_to_params(theta, model.parameters())
+                Utils.assign_flat_to_params(theta, model.parameters())
 
                 with torch.no_grad():
                     running = 0.0
