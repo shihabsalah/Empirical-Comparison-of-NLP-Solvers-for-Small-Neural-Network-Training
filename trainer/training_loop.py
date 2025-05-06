@@ -42,7 +42,7 @@ class TrainingLoop:
 
         # ---- model, loss, optimiser -----------------------------------------
         self.model = build_model(configuration.model).to(self.device)
-        self.loss_fn = get_loss(configuration.loss).to(self.device)
+        self.loss_function = get_loss(configuration.loss).to(self.device)
         self.optimizer: BaseOptimizer = get_optimizer(
             choice=configuration.optimizer_choice,
             model_parameters=self.model.parameters(),
@@ -63,7 +63,7 @@ class TrainingLoop:
             def closure() -> torch.Tensor:
                 self.optimizer.zero_grad()
                 outputs = self.model(features)
-                loss = self.loss_fn(outputs, labels)
+                loss = self.loss_function(outputs, labels)
                 loss.backward()
                 return loss
 
@@ -72,9 +72,9 @@ class TrainingLoop:
 
             with torch.no_grad():
                 outputs = self.model(features)
-                running_loss += self.loss_fn(outputs,
-                                             labels).item() * features.size(0)
-                if isinstance(self.loss_fn, torch.nn.CrossEntropyLoss):
+                running_loss += self.loss_function(outputs,
+                                                   labels).item() * features.size(0)
+                if isinstance(self.loss_function, torch.nn.CrossEntropyLoss):
                     correct += (outputs.argmax(dim=1) == labels).sum().item()
             total += features.size(0)
 
@@ -86,9 +86,9 @@ class TrainingLoop:
         with torch.no_grad():
             for features, labels in self.test_loader:
                 outputs = self.model(features)
-                running_loss += self.loss_fn(outputs,
-                                             labels).item() * features.size(0)
-                if isinstance(self.loss_fn, torch.nn.CrossEntropyLoss):
+                running_loss += self.loss_function(outputs,
+                                                   labels).item() * features.size(0)
+                if isinstance(self.loss_function, torch.nn.CrossEntropyLoss):
                     correct += (outputs.argmax(dim=1) == labels).sum().item()
                 total += features.size(0)
         return running_loss / total, correct / total
@@ -103,23 +103,24 @@ class TrainingLoop:
             f">>> Training on {self.device} with {self.config.optimizer_choice.name}")
 
         # trainer/training_loop.py  (inside run())
-        base_method = getattr(type(self.optimizer), "run_full_batch_solve")
-        if base_method is not BaseOptimizer.run_full_batch_solve:
-            # true one-shot solver (SLSQP, IPOPT, CMA-ES, …)
-            full_loss_closure = self._build_full_batch_closure()
-            self.optimizer.run_full_batch_solve(full_loss_closure)
+        if self.optimizer.is_one_shot_solver:
+            # ------------------------------------------------ one-shot path
+            full_loss = self._build_full_batch_closure()
+            self.optimizer.run_full_batch_solve(full_loss)
             self.snapshots.append(
                 Utils.flatten_params(self.model.parameters()))
             test_loss, test_acc = self._evaluate()
-            print(f"Final test loss {test_loss:.4f} acc {test_acc*100:.1f}%")
+            print(
+                f"Final test   loss {test_loss:.4f}  acc {test_acc*100:.1f}%")
 
         else:
+            # ------------------------------------------------ epoch loop
             for epoch in range(1, self.num_epochs + 1):
                 train_loss, train_acc = self._single_epoch()
                 test_loss,  test_acc = self._evaluate()
-                print(f"Epoch {epoch:02d}  "
-                      f"train loss {train_loss:.4f} acc {train_acc*100:5.1f}% | "
-                      f"test loss {test_loss:.4f} acc {test_acc*100:5.1f}%")
+                print(f"Epoch {epoch:02d} | "
+                      f"train loss {train_loss:.4f} acc {train_acc*100:5.1f}% || "
+                      f"test loss  {test_loss:.4f} acc {test_acc*100:5.1f}%")
                 if epoch % self.snapshot_interval == 0:
                     self.snapshots.append(
                         Utils.flatten_params(self.model.parameters()))
@@ -134,8 +135,8 @@ class TrainingLoop:
             running, total = 0.0, 0
             for features, labels in self.train_loader:
                 outputs = self.model(features)
-                running += self.loss_fn(outputs,
-                                        labels).item() * features.size(0)
+                running += self.loss_function(outputs,
+                                              labels).item() * features.size(0)
                 total += features.size(0)
             return running / total
         return closure

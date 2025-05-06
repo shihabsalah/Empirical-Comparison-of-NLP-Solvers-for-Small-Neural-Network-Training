@@ -22,4 +22,4 @@ class BaseOptimizer(ABC):
         Solvers like SLSQP, IPOPT, CMA-ES perform the entire optimisation in
         one call; default implementation does nothing.
         """
-        raise NotImplementedError
+        raise NotImplementedError("Only implemented by one-shot solvers.")

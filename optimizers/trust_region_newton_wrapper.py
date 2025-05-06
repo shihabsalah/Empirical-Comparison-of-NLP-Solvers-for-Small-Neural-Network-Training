@@ -32,6 +32,7 @@ class TrustRegionNewtonWrapper(BaseOptimizer):
     One-shot solver: after `run_full_batch_solve` finishes the model parameters
     have been replaced with the minimiser found by SciPy.
     """
+    is_one_shot_solver = False
 
     def __init__(self, model_parameters: Iterator[Tensor]) -> None:
         # Store *references* to the original parameter tensors

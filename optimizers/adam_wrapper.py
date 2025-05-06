@@ -22,6 +22,7 @@ from optimizers.base_optimizer import BaseOptimizer
 
 class AdamWrapper(BaseOptimizer):
     """A minimal, explicit wrapper so the Trainer sees a uniform API."""
+    is_one_shot_solver = False
 
     def __init__(
         self,

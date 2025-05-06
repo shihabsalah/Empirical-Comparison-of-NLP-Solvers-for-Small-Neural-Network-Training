@@ -24,6 +24,7 @@ from optimizers.base_optimizer import BaseOptimizer
 
 class LBFGSWrapper(BaseOptimizer):
     """Expose zero_grad / step(closure) while hiding LBFGS specifics."""
+    is_one_shot_solver = False
 
     def __init__(
         self,
