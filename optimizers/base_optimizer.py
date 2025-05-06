@@ -4,6 +4,7 @@ from typing import Callable
 
 class BaseOptimizer(ABC):
     """ This is a common optimizer interface. Every optimiser wrapper inherits from this."""
+    is_one_shot_solver: bool = False
 
     @abstractmethod
     def zero_grad(self) -> None: ...
