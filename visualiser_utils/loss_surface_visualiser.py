@@ -4,7 +4,8 @@ Heavy forward-passes can run on GPU.
 """
 
 from pathlib import Path
-from typing import Callable, Tuple, Union
+from typing import Callable, Dict, Tuple, Union
+import pickle
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -43,6 +44,27 @@ def draw_pca_loss_surface(
     use_cuda
         If True and CUDA available → run forward passes on GPU.
     """
+    # First check if we have pre-computed data
+    run_dir = Path(output_path).parent
+    precomputed_file = run_dir / "loss_surface_data.pkl"
+
+    if precomputed_file.exists():
+        print(
+            f"[loss-surface] Using pre-computed data from {precomputed_file}")
+        with open(precomputed_file, "rb") as handle:
+            precomputed_data = pickle.load(handle)
+        _plot_loss_surface(
+            alpha_grid=precomputed_data['alpha_grid'],
+            beta_grid=precomputed_data['beta_grid'],
+            loss_matrix=precomputed_data['loss_matrix'],
+            alpha_vals=precomputed_data['alpha_vals'],
+            beta_vals=precomputed_data['beta_vals'],
+            output_path=output_path
+        )
+        return
+
+    # Otherwise compute from scratch
+    print(f"[loss-surface] No pre-computed data found, computing from scratch...")
     device = Utils.choose_device(request_cuda=use_cuda)
     print(f"[loss-surface] using device: {device}")
 
@@ -93,6 +115,20 @@ def draw_pca_loss_surface(
                     total += xb.size(0)
             loss_matrix[j, i] = running_loss / total
 
+    # Plot the surface
+    _plot_loss_surface(alpha_grid, beta_grid, loss_matrix,
+                       alpha_vals, beta_vals, output_path)
+
+
+def _plot_loss_surface(
+    alpha_grid: np.ndarray,
+    beta_grid: np.ndarray,
+    loss_matrix: np.ndarray,
+    alpha_vals: np.ndarray,
+    beta_vals: np.ndarray,
+    output_path: Union[str, Path]
+) -> None:
+    """Create the contour plot using pre-computed or newly generated data."""
     # --- contour plot ----------------------------------------------------------
     fig, ax = plt.subplots(figsize=(5, 4))
     contour = ax.contour(alpha_grid, beta_grid, loss_matrix,

@@ -254,4 +254,76 @@ class Trainer:
         # Save runtime and memory metrics
         with open(target_directory / "metrics.json", "w") as mfile:
             json.dump(metrics, mfile)
+
+        # Pre-compute loss surface data for later analysis (only if enabled)
+        if self.configuration.hyper_parameters.precompute_surface and len(self.parameter_snapshots) > 1:
+            self._pre_compute_loss_surface(target_directory)
+
         print(f"Snapshots and metrics saved to {target_directory}")
+
+    # ------------------------------------------------------------------ #
+    #                   LOSS SURFACE PRE-COMPUTATION                      #
+    # ------------------------------------------------------------------ #
+
+    def _pre_compute_loss_surface(self, output_dir: pathlib.Path) -> None:
+        """Pre-compute loss surface values in PCA space to accelerate later analysis."""
+        from sklearn.decomposition import PCA
+
+        print("Pre-computing loss surface data for later analysis...")
+
+        # Convert snapshots to numpy array for PCA
+        snapshot_matrix = np.vstack(self.parameter_snapshots)
+
+        # --- PCA basis ------------------------------------------------------------
+        pca = PCA(n_components=2)
+        projection = pca.fit_transform(snapshot_matrix)
+        alpha_vals, beta_vals = projection.T
+        dir1, dir2 = pca.components_
+        theta_center = pca.mean_
+
+        # --- grid extents slightly beyond trajectory ------------------------------
+        padding = 0.5
+        grid_points = 35  # Resolution of grid
+        alpha_min, alpha_max = alpha_vals.min() - padding, alpha_vals.max() + padding
+        beta_min, beta_max = beta_vals.min() - padding, beta_vals.max() + padding
+        alpha_grid = np.linspace(alpha_min, alpha_max, grid_points)
+        beta_grid = np.linspace(beta_min, beta_max, grid_points)
+        loss_matrix = np.zeros((grid_points, grid_points))
+
+        # --- build model once, reuse parameters -------------------------------------
+        # Use the existing model instance
+        self.model.eval()
+
+        # --- loop over grid --------------------------------------------------------
+        for i, alpha in enumerate(alpha_grid):
+            print(
+                f"Computing loss surface: {i+1}/{grid_points} rows", end="\r")
+            for j, beta in enumerate(beta_grid):
+                theta = theta_center + alpha * dir1 + beta * dir2
+                Utils.assign_flat_to_params(theta, self.model.parameters())
+
+                running_loss, total = 0.0, 0
+                with torch.no_grad():
+                    for xb, yb in self.training_data_loader:
+                        outputs = self.model(xb)
+                        batch_loss = self.loss_function(outputs, yb)
+                        running_loss += batch_loss.item() * xb.size(0)
+                        total += xb.size(0)
+                loss_matrix[j, i] = running_loss / total
+
+        # Save the pre-computed surface data
+        surface_data = {
+            'alpha_grid': alpha_grid,
+            'beta_grid': beta_grid,
+            'loss_matrix': loss_matrix,
+            'alpha_vals': alpha_vals,
+            'beta_vals': beta_vals,
+            'pca_components': pca.components_,
+            'pca_mean': pca.mean_
+        }
+
+        with open(output_dir / "loss_surface_data.pkl", "wb") as handle:
+            pickle.dump(surface_data, handle)
+
+        print(
+            f"Loss surface data saved to {output_dir / 'loss_surface_data.pkl'}")

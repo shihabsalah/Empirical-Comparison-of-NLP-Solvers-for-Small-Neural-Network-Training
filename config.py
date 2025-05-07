@@ -38,6 +38,7 @@ class HyperParameterSet:
     seed: int = 42
     use_cuda: bool = True
     snapshot_every: int = 1
+    precompute_surface: bool = False  # Flag to control loss surface precomputation
 
 
 @dataclass

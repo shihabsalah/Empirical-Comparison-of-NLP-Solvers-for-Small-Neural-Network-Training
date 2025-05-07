@@ -3,6 +3,14 @@ from config import (
     DatasetName, ModelName, LossName, OptimizerName
 )
 from trainer import Trainer
+import argparse
+
+# Parse command line arguments
+parser = argparse.ArgumentParser(
+    description="Run neural network optimizer benchmark experiments")
+parser.add_argument("--surface", action="store_true",
+                    help="Pre-compute loss surfaces during training (significantly increases runtime)")
+args = parser.parse_args()
 
 # ---------- Fair benchmarking configurations ----------
 # Full-batch size and epochs common to epoch-style optimizers
@@ -25,6 +33,7 @@ cfg_gd = ExperimentConfig(
         use_cuda=True,
         snapshot_every=1,
         batch_size=COMMON_BATCH_SIZE,
+        precompute_surface=args.surface,  # Set from command line
     ),
 )
 # Adam optimizer
@@ -43,6 +52,7 @@ cfg_adam = ExperimentConfig(
         use_cuda=True,
         snapshot_every=1,
         batch_size=COMMON_BATCH_SIZE,
+        precompute_surface=args.surface,  # Set from command line
     ),
 )
 # L-BFGS optimizer (full-batch)
@@ -61,6 +71,7 @@ cfg_lbfgs = ExperimentConfig(
         use_cuda=True,
         snapshot_every=1,
         batch_size=COMMON_BATCH_SIZE,
+        precompute_surface=args.surface,  # Set from command line
     ),
 )
 # Trust-Region Newton optimizer (full-batch)
@@ -79,6 +90,7 @@ cfg_trn = ExperimentConfig(
         use_cuda=True,
         snapshot_every=1,
         batch_size=COMMON_BATCH_SIZE,
+        precompute_surface=args.surface,  # Set from command line
     ),
 )
 # Interior-Point solver (one-shot full-batch)
@@ -97,6 +109,7 @@ cfg_ip = ExperimentConfig(
         use_cuda=True,
         snapshot_every=1,
         batch_size=COMMON_BATCH_SIZE,
+        precompute_surface=args.surface,  # Set from command line
     ),
 )
 
@@ -105,4 +118,4 @@ Trainer(cfg_gd).run()
 Trainer(cfg_adam).run()
 Trainer(cfg_lbfgs).run()
 Trainer(cfg_trn).run()
-# Trainer(cfg_ip).run()
+Trainer(cfg_ip).run()
