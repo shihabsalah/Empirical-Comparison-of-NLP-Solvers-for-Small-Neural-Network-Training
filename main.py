@@ -4,6 +4,8 @@ from config import (
 )
 from trainer import Trainer
 import argparse
+from tqdm import tqdm
+import time
 
 # Parse command line arguments
 parser = argparse.ArgumentParser(
@@ -113,9 +115,39 @@ cfg_ip = ExperimentConfig(
     ),
 )
 
+# Setup all configurations
+configs = [
+    ("Gradient Descent", cfg_gd),
+    ("Adam", cfg_adam),
+    ("L-BFGS", cfg_lbfgs),
+    ("Trust-Region Newton", cfg_trn),
+    ("Interior Point", cfg_ip)
+]
+
+# Estimate total work units (epochs across all optimizers + 1 for interior point)
+total_work = sum(cfg.hyper_parameters.epochs for _, cfg in configs)
+
+# Setup progress bar
+pbar = tqdm(total=total_work, desc="Overall Progress", unit="epoch")
+
 # Run all benchmarks
-Trainer(cfg_gd).run()
-Trainer(cfg_adam).run()
-Trainer(cfg_lbfgs).run()
-Trainer(cfg_trn).run()
-Trainer(cfg_ip).run()
+for name, config in configs:
+    start_time = time.time()
+    pbar.set_description(f"Running {name}")
+
+    # Create a trainer with the current config
+    trainer = Trainer(config)
+
+    # Run the trainer
+    trainer.run()
+
+    # Update progress bar based on epochs
+    pbar.update(config.hyper_parameters.epochs if not config.optimizer_choice ==
+                OptimizerName.INTERIOR_POINT else 1)
+
+    # Show time taken for this optimizer
+    elapsed = time.time() - start_time
+    pbar.write(f"✓ Completed {name} in {elapsed:.1f}s")
+
+pbar.close()
+print("\nAll experiments completed!")

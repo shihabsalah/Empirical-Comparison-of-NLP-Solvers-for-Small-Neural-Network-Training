@@ -17,6 +17,7 @@ import json
 import torch
 from torch.utils.data import DataLoader
 import numpy as np
+from tqdm import tqdm
 
 from config import ExperimentConfig
 from utils import Utils
@@ -88,6 +89,13 @@ class Trainer:
         self.snapshot_interval: int = configuration.hyper_parameters.snapshot_every
         self.parameter_snapshots: List[np.ndarray] = []
 
+        # Early stopping parameters
+        self.early_stop_patience: int = 5  # Stop if no improvement for this many epochs
+        # Minimum change to count as improvement
+        self.early_stop_min_delta: float = 1e-4
+        self.best_val_loss: float = float('inf')
+        self.patience_counter: int = 0
+
     # --------------------------------------------------------------------- #
     #                       TRAINING LOOP LOGIC                             #
     # --------------------------------------------------------------------- #
@@ -143,18 +151,63 @@ class Trainer:
     # ------------------------------------------------------------------ #
 
     def _run_epoch_style_solver(self) -> None:
-        for epoch_index in range(1, self.maximum_epochs + 1):
+        """Run over multiple epochs with progress bar updating in place."""
+        # Create progress bar for epochs
+        pbar = tqdm(range(1, self.maximum_epochs + 1),
+                    desc="Training", leave=True, position=0)
+
+        # Collect results without printing each epoch
+        results = []
+
+        for epoch_index in pbar:
             training_loss, training_accuracy = self._run_single_epoch()
             testing_loss, testing_accuracy = self._evaluate_on_testing_set()
 
-            print(f"Epoch {epoch_index:02d} | "
-                  f"train loss {training_loss:.4f}  acc {training_accuracy*100:5.1f}% || "
-                  f"test loss  {testing_loss:.4f}  acc {testing_accuracy*100:5.1f}%")
+            # Store results
+            results.append({
+                'epoch': epoch_index,
+                'train_loss': training_loss,
+                'train_acc': training_accuracy,
+                'test_loss': testing_loss,
+                'test_acc': testing_accuracy
+            })
+
+            # Update progress bar with current metrics
+            pbar.set_postfix({
+                'train_loss': f'{training_loss:.4f}',
+                'train_acc': f'{training_accuracy*100:.1f}%',
+                'test_loss': f'{testing_loss:.4f}',
+                'test_acc': f'{testing_accuracy*100:.1f}%'
+            })
 
             if epoch_index % self.snapshot_interval == 0:
                 self.parameter_snapshots.append(Utils.flatten_params(
                     self.model.parameters()
                 ))
+
+            # Check for early stopping
+            if self._should_early_stop(testing_loss):
+                pbar.write(
+                    f"Early stopping at epoch {epoch_index}/{self.maximum_epochs} - No improvement for {self.early_stop_patience} epochs")
+                break
+
+        # Print summary of all epochs at the end if needed
+        if self.maximum_epochs > 0:
+            last = results[-1]
+            print(f"Final: train loss {last['train_loss']:.4f} acc {last['train_acc']*100:5.1f}% | "
+                  f"test loss {last['test_loss']:.4f} acc {last['test_acc']*100:5.1f}%")
+
+    def _should_early_stop(self, current_val_loss: float) -> bool:
+        """Check if training should be stopped early due to lack of improvement."""
+        if (self.best_val_loss - current_val_loss) > self.early_stop_min_delta:
+            # We have improvement
+            self.best_val_loss = current_val_loss
+            self.patience_counter = 0
+            return False
+        else:
+            # No significant improvement
+            self.patience_counter += 1
+            return self.patience_counter >= self.early_stop_patience
 
     # --------------------------------------------------------------------- #
     #                       INNER-LOOP HELPERS                               #
@@ -295,9 +348,11 @@ class Trainer:
         self.model.eval()
 
         # --- loop over grid --------------------------------------------------------
-        for i, alpha in enumerate(alpha_grid):
-            print(
-                f"Computing loss surface: {i+1}/{grid_points} rows", end="\r")
+        surface_pbar = tqdm(
+            alpha_grid, desc="Computing loss surface", leave=False)
+        for i, alpha in enumerate(surface_pbar):
+            surface_pbar.set_description(
+                f"Computing surface: row {i+1}/{grid_points}")
             for j, beta in enumerate(beta_grid):
                 theta = theta_center + alpha * dir1 + beta * dir2
                 Utils.assign_flat_to_params(theta, self.model.parameters())
