@@ -23,14 +23,11 @@ class LossName(Enum):
 
 
 class OptimizerName(Enum):
-    ADAM = auto()     # family A
-    L_BFGS = auto()     # family C
-    TRUST_REGION_NEWTON = auto()     # family B
-    SLSQP = auto()     # family D
-    IPOPT = auto()     # family E
-    ADMM = auto()     # family F
-    CMA_ES = auto()     # family G
-    KFAC = auto()     # family H  (optional)
+    ADAM = auto()
+    L_BFGS = auto()
+    TRUST_REGION_NEWTON = auto()
+    INTERIOR_POINT = auto()
+    GRADIENT_DESCENT = auto()
 
 
 @dataclass

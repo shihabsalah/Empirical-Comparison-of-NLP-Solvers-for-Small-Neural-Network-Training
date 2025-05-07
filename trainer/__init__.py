@@ -1,1 +1,1 @@
-from trainer.training_loop import TrainingLoop as Trainer
+from trainer.training_loop import Trainer as Trainer
