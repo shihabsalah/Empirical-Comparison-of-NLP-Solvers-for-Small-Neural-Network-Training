@@ -1,5 +1,7 @@
-torch>=2.7.0+cpu
-torchvision>=0.22.0+cpu
+torch>=2.7.0+cu117
+torchvision>=0.22.0+cu117
 numpy
 scipy
 scikit-learn
+matplotlib
+plotly

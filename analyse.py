@@ -145,6 +145,70 @@ def main() -> None:
             print(
                 f"  Saved loss surface plot to {optimizer_run_dir / f'pca_loss_surface_{optimizer_run_dir.name}.png'}")
 
+    # ----------------------------------------------------------------------
+    # Performance summary: evaluate final snapshot on held-out test set
+    from trainer.data_pipeline import build_data_loaders
+    from utils import Utils
+    import torch
+
+    results: dict[str, tuple[float, float]] = {}
+    # For each optimizer run, evaluate final snapshot
+    for optimizer_run_dir in optimizer_dirs:
+        snapshot_matrix = load_snapshot_matrix(optimizer_run_dir)
+        final_params = snapshot_matrix[-1]
+        # Load full dataset and split
+        features, labels = load_dataset(DatasetName.MNIST_DIGITS)
+        train_feats, test_feats, train_labels, test_labels = Utils.train_test_split(
+            features, labels, test_fraction=0.2, seed=42)
+        # Build test loader on CPU
+        _, test_loader = build_data_loaders(
+            train_feats, train_labels,
+            test_feats, test_labels,
+            device=torch.device('cpu'), batch_size=len(test_feats))
+        # Build fresh model and assign parameters
+        model = build_model(ModelName.MNIST_MLP)
+        Utils.assign_flat_to_params(final_params, model.parameters())
+        model.eval()
+        # Evaluate
+        total_loss, correct, total = 0.0, 0, 0
+        loss_fn = get_loss(LossName.CROSS_ENTROPY)
+        with torch.no_grad():
+            for xb, yb in test_loader:
+                logits = model(xb)
+                loss = loss_fn(logits, yb)
+                total_loss += loss.item() * xb.size(0)
+                preds = logits.argmax(dim=1)
+                correct += (preds == yb).sum().item()
+                total += xb.size(0)
+        avg_loss = total_loss / total
+        accuracy = correct / total
+        results[optimizer_run_dir.name] = (avg_loss, accuracy)
+
+    # Print markdown performance table
+    print("\n## Performance Summary")
+    print("| Optimizer | Loss | Accuracy | Loss / GD | Acc / GD |")
+    print("|---|---:|---:|---:|---:|")
+    gd_loss, gd_acc = results.get('GRADIENT_DESCENT', (None, None))
+    for opt, (loss, acc) in results.items():
+        ratio_loss = loss / gd_loss if gd_loss else float('nan')
+        ratio_acc = (acc / gd_acc) if gd_acc else float('nan')
+        print(
+            f"| {opt} | {loss:.4f} | {acc*100:.1f}% | {ratio_loss:.2f} | {ratio_acc:.2f} |")
+
+    # Save markdown summary to file
+    summary_path = pathlib.Path("runs") / "performance_summary.md"
+    with open(summary_path, "w") as md_file:
+        md_file.write("## Performance Summary\n")
+        md_file.write(
+            "| Optimizer | Loss | Accuracy | Loss / GD | Acc / GD |\n")
+        md_file.write("|---|---:|---:|---:|---:|\n")
+        for opt, (loss, acc) in results.items():
+            ratio_loss = loss / gd_loss if gd_loss else float('nan')
+            ratio_acc = (acc / gd_acc) if gd_acc else float('nan')
+            md_file.write(
+                f"| {opt} | {loss:.4f} | {acc*100:.1f}% | {ratio_loss:.2f} | {ratio_acc:.2f} |\n")
+    print(f"\nMarkdown summary saved to {summary_path}")
+
 
 if __name__ == "__main__":
     main()
