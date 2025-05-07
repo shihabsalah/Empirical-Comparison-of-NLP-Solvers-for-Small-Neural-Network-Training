@@ -37,6 +37,7 @@ import argparse
 import pathlib
 import pickle
 import numpy as np
+import json
 
 from visualiser_utils.pca_2d_visualiser import plot_2d_pca_trajectory
 from visualiser_utils.pca_3d_visualiser import plot_3d_pca_trajectory
@@ -186,27 +187,36 @@ def main() -> None:
 
     # Print markdown performance table
     print("\n## Performance Summary")
-    print("| Optimizer | Loss | Accuracy | Loss / GD | Acc / GD |")
-    print("|---|---:|---:|---:|---:|")
+    print("| Optimizer | Loss | Accuracy | Loss / GD | Acc / GD | Time (s) | Mem (MB) |")
+    print("|---|---:|---:|---:|---:|---:|---:|")
     gd_loss, gd_acc = results.get('GRADIENT_DESCENT', (None, None))
     for opt, (loss, acc) in results.items():
+        # load metrics
+        metrics = json.load(open(pathlib.Path('runs')/opt/'metrics.json'))
+        runtime = metrics.get('runtime_s', float('nan'))
+        mem = metrics.get('peak_mem_mb', float('nan'))
         ratio_loss = loss / gd_loss if gd_loss else float('nan')
         ratio_acc = (acc / gd_acc) if gd_acc else float('nan')
         print(
-            f"| {opt} | {loss:.4f} | {acc*100:.1f}% | {ratio_loss:.2f} | {ratio_acc:.2f} |")
+            f"| {opt} | {loss:.4f} | {acc*100:.1f}% | {ratio_loss:.2f} | {ratio_acc:.2f} "
+            f"| {runtime:.2f} | {mem:.1f} |")
 
     # Save markdown summary to file
     summary_path = pathlib.Path("runs") / "performance_summary.md"
     with open(summary_path, "w") as md_file:
         md_file.write("## Performance Summary\n")
         md_file.write(
-            "| Optimizer | Loss | Accuracy | Loss / GD | Acc / GD |\n")
-        md_file.write("|---|---:|---:|---:|---:|\n")
+            "| Optimizer | Loss | Accuracy | Loss / GD | Acc / GD | Time (s) | Mem (MB) |\n")
+        md_file.write("|---|---:|---:|---:|---:|---:|---:|\n")
         for opt, (loss, acc) in results.items():
+            metrics = json.load(open(pathlib.Path('runs')/opt/'metrics.json'))
+            runtime = metrics.get('runtime_s', float('nan'))
+            mem = metrics.get('peak_mem_mb', float('nan'))
             ratio_loss = loss / gd_loss if gd_loss else float('nan')
             ratio_acc = (acc / gd_acc) if gd_acc else float('nan')
             md_file.write(
-                f"| {opt} | {loss:.4f} | {acc*100:.1f}% | {ratio_loss:.2f} | {ratio_acc:.2f} |\n")
+                f"| {opt} | {loss:.4f} | {acc*100:.1f}% | {ratio_loss:.2f} | {ratio_acc:.2f} "
+                f"| {runtime:.2f} | {mem:.1f} |\n")
     print(f"\nMarkdown summary saved to {summary_path}")
 
 

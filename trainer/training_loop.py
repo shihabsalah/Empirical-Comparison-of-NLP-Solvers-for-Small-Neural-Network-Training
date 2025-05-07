@@ -12,6 +12,7 @@ from typing import Callable, List, Tuple
 import time
 import pathlib
 import pickle
+import json
 
 import torch
 from torch.utils.data import DataLoader
@@ -99,13 +100,28 @@ class Trainer:
           `run_full_batch_solve` once.
         • Otherwise we execute a standard epoch loop.
         """
+        # Reset peak GPU memory stats if using CUDA
+        if self.computation_device.type == 'cuda':
+            torch.cuda.reset_peak_memory_stats(self.computation_device)
+        # Time the solver
+        start_time = time.perf_counter()
         if self.optimizer.is_one_shot_solver:
             self._run_single_call_solver()
         else:
             self._run_epoch_style_solver()
-
-        # Persist snapshots for later PCA / visualisation
-        self._save_snapshots()
+        end_time = time.perf_counter()
+        # Compute metrics
+        runtime_s = end_time - start_time
+        if self.computation_device.type == 'cuda':
+            peak_mem_bytes = torch.cuda.max_memory_allocated(
+                self.computation_device)
+        else:
+            import psutil
+            peak_mem_bytes = psutil.Process().memory_info().rss
+        peak_mem_mb = peak_mem_bytes / (1024**2)
+        # Persist snapshots and metrics
+        metrics = {'runtime_s': runtime_s, 'peak_mem_mb': peak_mem_mb}
+        self._save_snapshots(metrics)
 
     # ------------------------------------------------------------------ #
     #  A. ONE-SHOT  (trust-constr, future CMA-ES, …)                     #
@@ -228,10 +244,14 @@ class Trainer:
     #                       SNAPSHOT PERSISTENCE                          #
     # ------------------------------------------------------------------ #
 
-    def _save_snapshots(self) -> None:
+    def _save_snapshots(self, metrics: dict) -> None:
         optimizer_name = self.configuration.optimizer_choice.name
         target_directory = pathlib.Path("runs") / optimizer_name
         target_directory.mkdir(parents=True, exist_ok=True)
+        # Save parameter snapshots
         with open(target_directory / "snapshots.pkl", "wb") as handle:
             pickle.dump(self.parameter_snapshots, handle)
-        print(f"Snapshots saved to {target_directory / 'snapshots.pkl'}")
+        # Save runtime and memory metrics
+        with open(target_directory / "metrics.json", "w") as mfile:
+            json.dump(metrics, mfile)
+        print(f"Snapshots and metrics saved to {target_directory}")
