@@ -63,6 +63,26 @@ def draw_pca_loss_surface(
         )
         return
 
+    # Check if we have enough snapshots for PCA
+    if len(snapshot_matrix) < 2:
+        print(
+            f"[loss-surface] Not enough snapshots for PCA (need 2+, got {len(snapshot_matrix)})")
+
+        # Create a placeholder image instead
+        fig, ax = plt.subplots(figsize=(5, 4))
+        ax.text(0.5, 0.5, "Not enough snapshots for loss surface\n(need 2+ parameter states for PCA)",
+                ha='center', va='center', fontsize=12)
+        ax.set_xlabel("PC-1")
+        ax.set_ylabel("PC-2")
+        ax.set_title("Loss Surface (insufficient data)")
+        ax.set_xlim(-1, 1)
+        ax.set_ylim(-1, 1)
+        ax.grid(True, linestyle='--', alpha=0.7)
+        fig.tight_layout()
+        fig.savefig(output_path, dpi=150)
+        plt.close(fig)
+        return
+
     # Otherwise compute from scratch
     print(f"[loss-surface] No pre-computed data found, computing from scratch...")
     device = Utils.choose_device(request_cuda=use_cuda)

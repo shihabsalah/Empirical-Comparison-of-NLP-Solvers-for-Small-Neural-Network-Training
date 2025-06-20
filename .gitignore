@@ -3,3 +3,6 @@ __pycache__/
 *$py.class
 .vscode/
 data/
+
+# YoYo AI version control directory
+.yoyo/

@@ -343,28 +343,94 @@ class Trainer:
         beta_grid = np.linspace(beta_min, beta_max, grid_points)
         loss_matrix = np.zeros((grid_points, grid_points))
 
-        # --- build model once, reuse parameters -------------------------------------
-        # Use the existing model instance
+        # --- Prepare for batch processing ---------------------------------------
+        # Create a larger batch size for better GPU utilization
+        large_batch_size = 4096
+
+        # Collect all data into memory for faster processing
+        all_features = []
+        all_labels = []
+
+        for features, labels in self.training_data_loader:
+            all_features.append(features)
+            all_labels.append(labels)
+
+        # Concatenate all batches into one large tensor for more efficient processing
+        all_features = torch.cat(all_features)
+        all_labels = torch.cat(all_labels)
+
+        # Number of samples
+        num_samples = all_features.shape[0]
+
+        # Use the existing model instance and ensure it's in eval mode
         self.model.eval()
 
-        # --- loop over grid --------------------------------------------------------
-        surface_pbar = tqdm(
-            alpha_grid, desc="Computing loss surface", leave=False)
-        for i, alpha in enumerate(surface_pbar):
+        # --- Process grid points in parallel batches -----------------------------
+        surface_pbar = tqdm(range(0, grid_points),
+                            desc="Computing loss surface", leave=False)
+
+        # Create a flattened grid of all (alpha, beta) combinations for parallel processing
+        all_alphas = []
+        all_betas = []
+        all_indices = []
+
+        for i in range(grid_points):
+            for j in range(grid_points):
+                all_alphas.append(alpha_grid[i])
+                all_betas.append(beta_grid[j])
+                # Store indices for rebuilding the loss matrix
+                all_indices.append((j, i))
+
+        # Process in batches to avoid memory issues
+        batch_size = 25  # Number of grid points to process at once
+        for batch_start in range(0, len(all_alphas), batch_size):
+            batch_end = min(batch_start + batch_size, len(all_alphas))
+
+            # Get the current batch of grid points
+            batch_alphas = all_alphas[batch_start:batch_end]
+            batch_betas = all_betas[batch_start:batch_end]
+            batch_indices = all_indices[batch_start:batch_end]
+
+            # Update progress bar
+            batch_midpoint = (batch_start + batch_end) // 2
+            percent_complete = (batch_midpoint / len(all_alphas)) * 100
             surface_pbar.set_description(
-                f"Computing surface: row {i+1}/{grid_points}")
-            for j, beta in enumerate(beta_grid):
+                f"Computing surface: {percent_complete:.1f}% complete")
+            surface_pbar.update(len(batch_indices) // grid_points)
+
+            # For each grid point in this batch
+            for k in range(len(batch_alphas)):
+                alpha = batch_alphas[k]
+                beta = batch_betas[k]
+                j, i = batch_indices[k]
+
+                # Compute parameters for this grid point
                 theta = theta_center + alpha * dir1 + beta * dir2
                 Utils.assign_flat_to_params(theta, self.model.parameters())
 
-                running_loss, total = 0.0, 0
+                # Process data in large batches for better GPU utilization
+                total_loss = 0.0
                 with torch.no_grad():
-                    for xb, yb in self.training_data_loader:
-                        outputs = self.model(xb)
-                        batch_loss = self.loss_function(outputs, yb)
-                        running_loss += batch_loss.item() * xb.size(0)
-                        total += xb.size(0)
-                loss_matrix[j, i] = running_loss / total
+                    # Process the dataset in chunks that fit in GPU memory
+                    for start_idx in range(0, num_samples, large_batch_size):
+                        end_idx = min(
+                            start_idx + large_batch_size, num_samples)
+
+                        # Get batch
+                        batch_x = all_features[start_idx:end_idx]
+                        batch_y = all_labels[start_idx:end_idx]
+
+                        # Forward pass
+                        outputs = self.model(batch_x)
+                        batch_loss = self.loss_function(outputs, batch_y)
+
+                        # Accumulate loss
+                        total_loss += batch_loss.item() * (end_idx - start_idx)
+
+                # Store average loss for this grid point
+                loss_matrix[j, i] = total_loss / num_samples
+
+        surface_pbar.close()
 
         # Save the pre-computed surface data
         surface_data = {
